@@ -102,7 +102,7 @@ footer .btn{width:100%}@media (min-width:900px){footer{text-align:left}footer .b
 .admin-btn:active{box-shadow:inset 3px 3px 7px var(--sh-d),inset -3px -3px 7px var(--sh-l)}
 .soft{background:var(--bg);color:var(--ink);box-shadow:var(--raise-xs)}
 .soft:active{box-shadow:inset 3px 3px 7px var(--sh-d),inset -3px -3px 7px var(--sh-l)}
-dialog{border:0;border-radius:26px;background:var(--bg);color:var(--ink);box-shadow:var(--raise);padding:24px;width:min(92vw,420px)}
+dialog{max-height:calc(100dvh - 32px);overflow:auto;border:0;border-radius:26px;background:var(--bg);color:var(--ink);box-shadow:var(--raise);padding:24px;width:min(92vw,420px)}
 dialog::backdrop{background:rgba(30,42,68,.35)}
 dialog h2{margin:0 0 16px}
 dialog label{display:block;font-size:14px;color:var(--muted);margin:14px 0 6px}
@@ -111,6 +111,9 @@ dialog input:not([type=checkbox]){font:inherit;width:100%;min-height:48px;paddin
 dialog input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent)}
 dialog input:disabled{opacity:.5}
 dialog .note{margin-top:12px}
+.row2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.row2>div{min-width:0}
+dialog .row2 input{min-width:0;padding:10px;font-size:15px}
 .dlg-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:20px}
 :focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 </style>
@@ -168,6 +171,11 @@ dialog .note{margin-top:12px}
     <label for="dueIn">Due date</label>
     <input id="dueIn" type="date">
     <label class="check"><input type="checkbox" id="autoDue"> Use the automatic monthly due date</label>
+    <div class="row2">
+      <div><label for="psIn">Billing period from</label><input id="psIn" type="date"></div>
+      <div><label for="peIn">to</label><input id="peIn" type="date"></div>
+    </div>
+    <label class="check"><input type="checkbox" id="autoPeriod"> Use the automatic billing period</label>
     <p class="note" id="urlNote" hidden>This link sets the amount or due date in its address, so your changes won’t show here. Open the page without ?amount= or ?due= to see them.</p>
     <p class="note warn" id="editMsg" role="status" hidden></p>
     <div class="dlg-actions">
@@ -209,6 +217,10 @@ const short = d => d.toLocaleDateString("en-PH", {month:"short", day:"numeric"})
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 const parseYMD = str => { const a = String(str || "").split("-").map(Number); return a.length === 3 && !a.some(isNaN) ? new Date(a[0], a[1]-1, a[2]) : null; };
 
+const fmtPeriod = (a, b) => a.getFullYear() === b.getFullYear()
+  ? `${short(a)} – ${short(b)}, ${b.getFullYear()}`
+  : `${a.toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"})} – ${b.toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"})}`;
+let periodStart = null, periodEnd = null;   // the billing period currently shown
 let SAVED = {};            // amount / due date saved by the admin (from /api/settings)
 let C = {}, dueDate = null;
 
@@ -280,7 +292,14 @@ function render() {
   const pStart = mk(dueDate.getFullYear(), dueDate.getMonth(), C.periodStartDay);
   const nextStart = mk(dueDate.getFullYear(), dueDate.getMonth() + 1, C.periodStartDay);
   const pEnd = new Date(nextStart.getFullYear(), nextStart.getMonth(), nextStart.getDate() - 1);
-  $("period").textContent = q.get("period") || `${short(pStart)} – ${short(pEnd)}, ${pEnd.getFullYear()}`;
+  /* billing period: link (?period=) > admin-saved period (until it is long past) > automatic month */
+  periodStart = pStart; periodEnd = pEnd;
+  const sPS = parseYMD(SAVED.periodStart), sPE = parseYMD(SAVED.periodEnd);
+  if (sPS && sPE) {
+    const last = Math.max(sPE, parseYMD(SAVED.due) || sPE);
+    if ((today - last) / 864e5 <= C.overdueDays) { periodStart = sPS; periodEnd = sPE; }
+  }
+  $("period").textContent = q.get("period") || fmtPeriod(periodStart, periodEnd);
   $("due").textContent = dueDate.toLocaleDateString("en-PH", {weekday:"short", year:"numeric", month:"long", day:"numeric"});
 
   const days = Math.round((dueDate - today) / 864e5);
@@ -377,6 +396,9 @@ $("lockForm").addEventListener("submit", async e => {
     $("dueIn").value = ymd(dueDate);
     const auto = !(parseYMD(SAVED.due));
     $("autoDue").checked = auto; $("dueIn").disabled = auto;
+    $("psIn").value = ymd(periodStart); $("peIn").value = ymd(periodEnd);
+    const autoP = !(parseYMD(SAVED.periodStart) && parseYMD(SAVED.periodEnd));
+    $("autoPeriod").checked = autoP; $("psIn").disabled = $("peIn").disabled = autoP;
     $("urlNote").hidden = !(q.get("amount") || q.get("due"));
     step("edit"); $("amt").focus();
   } else if (status === 401) show($("lockMsg"), "Wrong password.");
@@ -385,6 +407,7 @@ $("lockForm").addEventListener("submit", async e => {
 });
 
 $("autoDue").addEventListener("change", () => { $("dueIn").disabled = $("autoDue").checked; });
+$("autoPeriod").addEventListener("change", () => { $("psIn").disabled = $("peIn").disabled = $("autoPeriod").checked; });
 
 $("editForm").addEventListener("submit", async e => {
   e.preventDefault();
@@ -392,8 +415,12 @@ $("editForm").addEventListener("submit", async e => {
   if (!(amount > 0)) return show($("editMsg"), "Enter a valid amount.");
   const auto = $("autoDue").checked;
   if (!auto && !$("dueIn").value) return show($("editMsg"), "Pick a due date or use the automatic one.");
+  const autoP = $("autoPeriod").checked, ps = $("psIn").value, pe = $("peIn").value;
+  if (!autoP && (!ps || !pe)) return show($("editMsg"), "Pick both period dates or use the automatic one.");
+  if (!autoP && pe < ps) return show($("editMsg"), "The period can’t end before it starts.");
   show($("editMsg"), "Saving…");
-  const {status, data} = await api({action: "save", password: adminPw, amount, due: auto ? "" : $("dueIn").value});
+  const {status, data} = await api({action: "save", password: adminPw, amount, due: auto ? "" : $("dueIn").value,
+    periodStart: autoP ? "" : ps, periodEnd: autoP ? "" : pe});
   if (status === 200) { SAVED = data.settings || {}; render(); dlg.close(); }
   else if (status === 401) { adminPw = ""; step("lock"); show($("lockMsg"), "Password needed again."); }
   else if (!data.error) show($("editMsg"), unavailable);
