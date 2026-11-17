@@ -201,9 +201,9 @@ const CONFIG = {
   },
   methods: [
     // logo = path to the OFFICIAL logo file (put them in a "logos" folder next to this page).
-    // android = app package (opens the installed app on Android). scheme = iPhone deep link that opens the app (e.g. "gcash://"); leave "" if unknown. qr = optional payment QR image.
-    { name:"GCash", logo:"logos/gcash.png",        brand:"#007CFF", accName:"MATT GLENN LAYNESA", accNumber:"0910 380 6887",     android:"com.globe.gcash.android", scheme:"gcash://", qr:"" },
-    { name:"MariBank", logo:"logos/maribank.png",     brand:"#F26B21", accName:"MATT GLENN LAYNESA", accNumber:"12429398191",    android:"ph.seabank.seabank", scheme:"", qr:"" }
+    // android = Play Store package, iosId = App Store id (used if the app is not installed). scheme = iPhone deep link that opens an installed app (e.g. "gcash://"); "" if unknown.
+    { name:"GCash", logo:"logos/gcash.png",        brand:"#007CFF", accName:"MATT GLENN LAYNESA", accNumber:"0910 380 6887",     android:"com.globe.gcash.android", iosId:"520020791", scheme:"gcash://", qr:"" },
+    { name:"MariBank", logo:"logos/maribank.png",     brand:"#F26B21", accName:"MATT GLENN LAYNESA", accNumber:"12429398191",    android:"ph.seabank.seabank", iosId:"1592249158", scheme:"", qr:"" }
   ]
 };
 /* ============================= */
@@ -240,26 +240,28 @@ const copyText = async (text, btn) => {
 const isAndroid = /android/i.test(navigator.userAgent);
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
-/* opens the installed app directly (never the store) */
+const playUrl = m => `https://play.google.com/store/apps/details?id=${m.android}`;
+const appStoreUrl = m => `https://apps.apple.com/ph/app/id${m.iosId}`;
+
+/* opens the app if it is installed; otherwise goes to the Play Store / App Store page */
 function openApp(m, msgEl) {
   msgEl.hidden = true;
-  let target = "";
-  if (isAndroid && m.android)
-    target = `intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=${m.android};end`;
-  else if (isIOS && m.scheme) target = m.scheme;
-  if (!target) {
-    msgEl.textContent = isAndroid || isIOS
-      ? `Open the ${m.name} app from your home screen, then use the details above.`
-      : `Open this page on your phone to launch ${m.name}.`;
-    msgEl.hidden = false; return;
+  const stillHere = () => document.visibilityState === "visible";   // false once the app or store took over
+
+  if (isAndroid && m.android) {
+    // installed -> the app opens; not installed -> Chrome follows the fallback to the Play Store
+    location.href = `intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=${m.android};S.browser_fallback_url=${encodeURIComponent(playUrl(m))};end`;
+    setTimeout(() => { if (stillHere()) location.href = playUrl(m); }, 1800);   // in-app browsers that block intents
+    return;
   }
-  location.href = target;
-  setTimeout(() => {              // still on the page = the app did not open
-    if (document.visibilityState === "visible") {
-      msgEl.textContent = `Couldn’t open ${m.name}. Make sure it’s installed, or open it from your home screen.`;
-      msgEl.hidden = false;
-    }
-  }, 1600);
+  if (isIOS && m.iosId) {
+    if (!m.scheme) { location.href = appStoreUrl(m); return; }   // no known deep link: App Store page (shows "Open" if installed)
+    location.href = m.scheme;                                    // installed -> opens the app
+    setTimeout(() => { if (stillHere()) location.href = appStoreUrl(m); }, 1600);   // not installed -> App Store
+    return;
+  }
+  msgEl.textContent = `Open this page on your phone to launch ${m.name}.`;
+  msgEl.hidden = false;
 }
 
 const logoHTML = m => `<span class="logo" style="--brand:${m.brand}"><img src="${m.logo||""}" alt="${m.name} logo" onerror="this.parentNode.classList.add('fallback');this.replaceWith(document.createTextNode('${m.name[0]}'))"></span>`;
