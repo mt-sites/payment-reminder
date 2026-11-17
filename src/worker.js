@@ -71,6 +71,14 @@ async function postSettings(request, env) {
   else if (validDate(due)) next.due = due;
   else return json({ error: "Enter a valid due date." }, 400);
 
+  // billing period: both dates or neither (neither = automatic)
+  if (body.periodStart !== undefined || body.periodEnd !== undefined) {
+    const ps = String(body.periodStart || ""), pe = String(body.periodEnd || "");
+    if (ps === "" && pe === "") { delete next.periodStart; delete next.periodEnd; }
+    else if (validDate(ps) && validDate(pe) && pe >= ps) { next.periodStart = ps; next.periodEnd = pe; }
+    else return json({ error: "Enter a valid billing period." }, 400);
+  }
+
   await env.SETTINGS.put(KEY, JSON.stringify(next));
   return json({ ok: true, settings: next });
 }
