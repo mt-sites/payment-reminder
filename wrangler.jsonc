@@ -1,6 +1,6 @@
 {
   // Must be the exact name of your Worker in Cloudflare (Workers & Pages → your project).
-  "name": "YOUR-WORKER-NAME",
+  "name": "payment-reminder",
   "main": "src/worker.js",
   "compatibility_date": "2026-01-01",
 
@@ -13,6 +13,6 @@
   // Stores the amount and due date saved from the admin lock.
   // Create it first: Cloudflare → Storage & Databases → KV → Create, then paste its ID below.
   "kv_namespaces": [
-    { "binding": "SETTINGS", "id": "PASTE_YOUR_KV_NAMESPACE_ID_HERE" }
+    { "binding": "SETTINGS", "id": "e4077c966156474a8fbcf3dd2c74e132" }
   ]
 }
