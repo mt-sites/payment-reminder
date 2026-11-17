@@ -43,7 +43,8 @@ async function getSettings(env) {
 // Only someone with the password can change them.
 async function postSettings(request, env) {
   const secret = env.adminpassword || env.ADMIN_PASSWORD;
-  if (!secret || !env.SETTINGS) return json({ error: "Server is not set up yet." }, 500);
+  if (!secret) return json({ error: "Server is not set up yet: the adminpassword secret is missing on this Worker." }, 500);
+  if (!env.SETTINGS) return json({ error: "Server is not set up yet: the SETTINGS KV binding is missing on this Worker." }, 500);
 
   let body;
   try { body = await request.json(); } catch { return json({ error: "Bad request." }, 400); }
