@@ -1,0 +1,18 @@
+{
+  // Must be the exact name of your Worker in Cloudflare (Workers & Pages → your project).
+  "name": "YOUR-WORKER-NAME",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-01-01",
+
+  // The payment page and logos are served from the "public" folder.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+
+  // Stores the amount and due date saved from the admin lock.
+  // Create it first: Cloudflare → Storage & Databases → KV → Create, then paste its ID below.
+  "kv_namespaces": [
+    { "binding": "SETTINGS", "id": "PASTE_YOUR_KV_NAMESPACE_ID_HERE" }
+  ]
+}
